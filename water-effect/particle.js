@@ -325,7 +325,7 @@ class WaterParticleEffect {
 
     const emitThreshold = 170 * Math.pow((1.1 - this.currentSpeed), 0.3);
 
-    if (timestamp - this.movingRipple.info.lastEmmitTime > emitThreshold) {
+    if (timestamp - this.movingRipple.info.lastEmitTime > emitThreshold) {
       const particleRot = this.player.rotation.x !== 0 ?  Math.PI + this.player.rotation.y : -this.player.rotation.y;
       playerRotationAttribute.setX(this.movingRipple.info.currentCircleRipple, particleRot);
       
@@ -359,7 +359,7 @@ class WaterParticleEffect {
       randAttribute.setX(this.movingRipple.info.currentBrokenRipple, Math.random());
       this.movingRipple.info.currentCircleRipple ++;
       this.movingRipple.info.currentBrokenRipple ++;
-      this.movingRipple.info.lastEmmitTime = timestamp;
+      this.movingRipple.info.lastEmitTime = timestamp;
 
       // reset index
       const lastIndexOfCircleRipple = (particleCount - 1) / 2;
@@ -426,7 +426,7 @@ class WaterParticleEffect {
     }  
   }
 
-  playMovingSplash(px, py, pz, maxEmmit, scale, velocity, acc, brokenVelocity, nonCutout = 0) {
+  playMovingSplash(px, py, pz, maxEmit, scale, velocity, acc, brokenVelocity, nonCutout = 0) {
     let count = 0;
     const particleCount = this.movingSplash.info.particleCount;
     const positionsAttribute = this.movingSplash.geometry.getAttribute('positions');
@@ -451,9 +451,12 @@ class WaterParticleEffect {
         nonCutoutAttribute.setX(i, nonCutout);
         count ++;
       }
-      if (count >= maxEmmit) {
+      if (count >= maxEmit) {
         break;
       }
+    }
+    if (count < maxEmit) {
+      console.log('not enough')
     }
     positionsAttribute.needsUpdate = true;
     scalesAttribute.needsUpdate = true;
@@ -621,7 +624,7 @@ class WaterParticleEffect {
           this.playerDir.x * 0.5 + playerQ.x * freestyleSplashPos * right, 
           0, 
           this.playerDir.z * 0.5 + playerQ.z * freestyleSplashPos * right,
-          5,
+          4,
           1.2 + Math.random() * 0.2,
           velocity,
           acc, 
@@ -697,7 +700,7 @@ class WaterParticleEffect {
   playBubble(timestamp) {
     const positionsAttribute = this.bubble.geometry.getAttribute('positions');
     const scalesAttribute = this.bubble.geometry.getAttribute('scales');
-    if (timestamp - this.bubble.info.lastEmmitTime > 100) {
+    if (timestamp - this.bubble.info.lastEmitTime > 100) {
       const maxEmit = (Math.floor(this.currentSpeed * 10 + 1) * 5);
       for (let i = 0; i < maxEmit; i ++) {
         localVector3.set(this.player.position.x, this.player.position.y, this.player.position.z);

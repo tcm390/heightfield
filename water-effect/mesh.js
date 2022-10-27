@@ -292,7 +292,7 @@ const getMovingRipple = () => {
     particleCount: particleCount,
     currentCircleRipple: 0,
     currentBrokenRipple: 15,
-    lastEmmitTime: 0,
+    lastEmitTime: 0,
   }
   const euler = new THREE.Euler(-Math.PI / 2, 0, 0);
   const quaternion = new THREE.Quaternion();
@@ -308,7 +308,7 @@ const getMovingRipple = () => {
   return movingRipple;
 }
 const getMovingSplash = () => {
-  const particleCount = 60;
+  const particleCount = 80;
   const attributeSpecs = [];
   attributeSpecs.push({name: 'scales', itemSize: 1});
   attributeSpecs.push({name: 'broken', itemSize: 1});
@@ -437,7 +437,7 @@ const getBubble = () => {
   
   bubble.info = {
     particleCount: particleCount,
-    lastEmmitTime: 0,
+    lastEmitTime: 0,
     velocity: [particleCount],
     offset: [particleCount],
     livingTime:[particleCount],
