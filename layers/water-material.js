@@ -9,9 +9,6 @@ const _createWaterMaterial = () => {
         tDepth: {
           value: null
         },
-        tDudv: {
-          value: null
-        },
         cameraNear: {
           value: 0
         },
@@ -22,9 +19,6 @@ const _createWaterMaterial = () => {
           value: new THREE.Vector2()
         },
         foamTexture: {
-          value: null
-        },
-        causticTexture: {
           value: null
         },
         mirror: {
@@ -43,9 +37,6 @@ const _createWaterMaterial = () => {
           value: new THREE.Vector3()
         },
         cameraInWater: {
-          value: null
-        },
-        tNormal: {
           value: null
         },
         tDistortion: {
@@ -144,15 +135,31 @@ const _createWaterMaterial = () => {
 
         uniform float uTime;
         uniform sampler2D tDepth;
-        uniform sampler2D tDudv;
         uniform sampler2D foamTexture;
-        uniform sampler2D causticTexture;
         uniform float cameraNear;
         uniform float cameraFar;
         uniform vec2 resolution;
 
-        uniform sampler2D tNormal;
         uniform sampler2D tDistortion;
+
+        const vec4 phases = vec4(0.28, 0.50, 0.07, 0);
+        const vec4 amplitudes = vec4(4.02, 0.34, 0.65, 0);
+        const vec4 frequencies = vec4(0.00, 0.48, 0.08, 0);
+        const vec4 offsets = vec4(0.00, 0.2, 0.00, 0);
+
+        const float TAU = 2. * 3.14159265;
+
+        vec4 cosine_gradient(float x,  vec4 phase, vec4 amp, vec4 freq, vec4 offset){
+          phase *= TAU;
+          x *= TAU;
+
+          return vec4(
+            offset.r + amp.r * 0.5 * cos(x * freq.r + phase.r) + 0.5,
+            offset.g + amp.g * 0.5 * cos(x * freq.g + phase.g) + 0.5,
+            offset.b + amp.b * 0.5 * cos(x * freq.b + phase.b) + 0.5,
+            offset.a + amp.a * 0.5 * cos(x * freq.a + phase.a) + 0.5
+          );
+        }
         
         float blendOverlay( float base, float blend ) {
           return( base < 0.5 ? ( 2.0 * base * blend ) : ( 1.0 - 2.0 * ( 1.0 - base ) * ( 1.0 - blend ) ) );
@@ -187,28 +194,26 @@ const _createWaterMaterial = () => {
           float linearEyeDepth = getViewZ(getDepth(screenUV));
 
           if (!cameraInWater) {
-            // water and shoreline
+            //################################## compute waterColor ##################################
             float depthScale = 15.;
             float depthFalloff = 3.;
             float sceneDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, depthScale, depthFalloff);
-            
-            vec4 shoreColor = vec4(0.17992, 0.4992, 0.09968, (1. - sceneDepth));
-            vec4 waterColor = vec4(0.126, 0.47628, 0.6048, (1. - sceneDepth));
-
             vec3 viewIncidentDir = normalize(eye - vPos.xyz);
-            vec3 viewReflectDir=reflect(viewIncidentDir, vec3(0., 1.0, 0.));
+            vec3 viewReflectDir = reflect(viewIncidentDir, vec3(0., 1.0, 0.));
             float fresnelCoe = (dot(viewIncidentDir,viewReflectDir) + 1.) / 2.;
-            fresnelCoe = clamp(fresnelCoe, 0.5, 1.0);
-            float waterColorDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 40., 3.);
+            fresnelCoe = clamp(fresnelCoe, 0., 1.0);
+            float waterColorDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 40., 1.);
             float colorLerp = mix(fresnelCoe, 1. - waterColorDepth, waterColorDepth);
 
-            vec4 col = mix(shoreColor, waterColor, colorLerp);
-            col.a = 1. - sceneDepth;
+            vec4 cos_grad = cosine_gradient(saturate(1. - colorLerp), phases, amplitudes, frequencies, offsets);
+            cos_grad = clamp(cos_grad, vec4(0.), vec4(1.));
+            vec4 waterColor = vec4(cos_grad.rgb, 1. - sceneDepth);
+            
 
+            //################################## handle foam ##################################
             float fadeoutDistance = 50.;
             float fadeoutLerp = pow(saturate(distance(playerPos, vPos) / fadeoutDistance), 3.);
-            
-            float foamDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 8., 2.);
+        
             vec4 ds2 = texture2D( 
               tDistortion, 
               vec2(
@@ -223,39 +228,11 @@ const _createWaterMaterial = () => {
                 0.3 * vPos.z + uTime * 0.005
               ) 
             );
-            // float distortionDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 8., 2.);
-            // float foamDistortion = 4.0 + ( ds2.g * 20. + ds.g * 40.) * (1. - distortionDepth);
-            // float foamCutout = 0.6;
-            // float foamTDepthScale = 5.0;
-            // float foamTDepthFalloff = 2.0;
-            // float foamTDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, foamDistortion, foamTDepthFalloff);
-            // float foamTDepth2 = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 10., foamTDepthFalloff);
             
-            // float foamAmount = 1.3 * pow(foamTDepth, 1.0);
-            // float foamUvY = vPos.x * 0.1;
-            // float foamUvX = foamTDepth2 * foamAmount - uTime * 0.5;
-            // vec4 foamT = texture2D(foamTexture, vec2(foamUvY, foamUvX));
-            // foamT = cutout((foamT * foamTDepth).r, foamCutout);
-            // foamT *= mix(vec4(0.), foamT, fadeoutLerp);
-
-
-            // // foam line
-            // float distortionOp = distortionDepth;
-            // float fadeoutThreshold = 0.85;
-            // if (distortionDepth > fadeoutThreshold) {
-            //   distortionOp = fadeoutThreshold - (fadeoutThreshold / (1.0 - fadeoutThreshold)) * (distortionDepth - fadeoutThreshold);
-            // }
-            // vec4 foamColor = vec4(1.0, 1.0, 1.0, 0.9 * fadeoutLerp * distortionOp);
-            // float foamOpDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 3., 1.);
-            // vec4 foamLineCutOut = mix(vec4(0.0), saturate(foamT), foamOpDepth);
-            // vec4 foam = foamLineCutOut * mix(col, foamColor, fadeoutLerp);
-            // vec4 col2 = col * ((vec4(1.0) - foamLineCutOut)) + foam;
-
-            // float foamDistortion = ( ds2.g * 2. + ds.g * 4.);
             float distortionDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 8., 2.);
             float distortionDegree = pow(clamp((1. - distortionDepth), 0.2, 1.0), 0.2);
             vec2 foamDistortion = vec2(ds2.r + ds.r, ds2.g + ds.g) * distortionDegree;
-            // float foamDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 8., 2.);
+            float foamDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 8., 2.);
             float foamDiff = saturate( fragmentLinearEyeDepth - linearEyeDepth );
             float foamUvX = (vPos.x + vPos.z) * -0.02;
             float foamUvY = (vPos.x + vPos.z) * -0.02 + foamDepth * 1.5 - uTime * 0.4;
@@ -263,22 +240,14 @@ const _createWaterMaterial = () => {
             vec4 foamTex = texture2D(foamTexture, foamUv);
             foamTex = step(vec4(0.9), foamTex);
             vec4 foamT = vec4(foamTex.r * (1.0 - foamDepth) * 1.5);
-            // foamT = step(vec4(0.5), foamT);
             foamT = mix(vec4(0.), foamT, foamDepth * fadeoutLerp);
-            // foamT.rgb *= 5.;
             vec4 foamLineCutOut = saturate(foamT);
-            vec4 col2 = col * ((vec4(1.0) - foamLineCutOut)) + foamT;
-
-            
+            vec4 col2 = waterColor * ((vec4(1.0) - foamLineCutOut)) + foamT;
 
 
-
-
-            
-
+            //################################## handle mirror ##################################
             vec3 sunColor = vec3(0., 0., 0.);
             vec3 sunDir = vec3(0.70707, 0.70707, 0.);
-
             vec3 surfaceNormal = normalize( vNormal * vec3( 1.5, 1.0, 1.5 ) );
             vec3 diffuseLight = vec3(0.0);
             vec3 specularLight = vec3(0.0);
@@ -291,17 +260,14 @@ const _createWaterMaterial = () => {
             vec3 reflectionSample = vec3( texture2D( mirror, vUv.xy / vUv.w + distortion ) );
             float theta = max( dot( eyeDirection, surfaceNormal ), 0.0 );
             float rf0 = 0.3;
-            float reflectance = rf0 + ( 1.0 - rf0 ) * pow( ( 1.0 - theta ), 5.0 );
-            vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * col2.rgb;
-            vec3 albedo = mix( ( sunColor * diffuseLight * 0.3 + scatter ) * getShadowMask(), ( vec3( 0.1 ) + reflectionSample * 0.4 + reflectionSample * specularLight ), reflectance);
-            gl_FragColor = vec4( albedo, col2.a );
+            float reflectance = rf0 + (1.0 - rf0) * pow((1.0 - theta), 5.0);
+            vec3 albedo = mix((sunColor * diffuseLight * 0.3) * getShadowMask(), (vec3( 0.1 ) + reflectionSample * 0.4 + reflectionSample * specularLight), reflectance);
+            gl_FragColor = vec4(albedo, col2.a);
             gl_FragColor.rgb += col2.rgb;
           }
           else{
+            //################################## refraction ##################################
             vec3 waterColor = vec3(0.126, 0.47628, 0.6048);
-            // vec4 base = texture2DProj( refractionTexture, vUv );
-            // gl_FragColor = vec4( blendOverlay( base.rgb, waterColor), 1.0);
-
             vec3 sunColor = vec3(0.0, 0.0, 0.0);
             vec3 sunDir = vec3(0.70707, 0.70707, 0.);
 
@@ -310,18 +276,17 @@ const _createWaterMaterial = () => {
             vec3 specularLight = vec3(0.0);
             vec3 worldToEye = eye-vPos.xyz;
             vec3 eyeDirection = normalize( worldToEye );
-            sunLight( surfaceNormal, eyeDirection, 100.0, 2.0, 0.5, diffuseLight, specularLight, sunColor, sunDir);
+            sunLight(surfaceNormal, eyeDirection, 100.0, 2.0, 0.5, diffuseLight, specularLight, sunColor, sunDir);
             float distance = length(worldToEye);
             float distortionScale = 0.1;
             vec2 distortion = surfaceNormal.xz * ( 0.001 + 1.0 / distance ) * distortionScale;
             vec3 reflectionSample = vec3( texture2D( refractionTexture, vUv.xy / vUv.w + distortion ) );
             float theta = max( dot( eyeDirection, surfaceNormal ), 0.0 );
             float rf0 = 0.3;
-            float reflectance = rf0 + ( 1.0 - rf0 ) * pow( ( 1.0 - theta ), 5.0 );
-            vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * waterColor;
-            vec3 albedo = mix( ( sunColor * diffuseLight * 0.3 + scatter ) * getShadowMask(), ( vec3( 0.1 ) + reflectionSample * 0.4 + reflectionSample * specularLight ), reflectance);
-            gl_FragColor = vec4( albedo, 1.0);
-            gl_FragColor.rgb += waterColor;
+            float reflectance = rf0 + (1.0 - rf0) * pow((1.0 - theta), 5.0);
+            vec3 albedo = mix((sunColor * diffuseLight * 0.3) * getShadowMask(), (vec3(0.1) + reflectionSample * 0.4 + reflectionSample * specularLight), reflectance);
+            gl_FragColor = vec4(albedo, 1.0);
+            gl_FragColor.rgb += waterColor.rgb;
           }
           #include <tonemapping_fragment>
           #include <fog_fragment>
