@@ -202,8 +202,11 @@ const _createWaterMaterial = () => {
             vec3 viewReflectDir = reflect(viewIncidentDir, vec3(0., 1.0, 0.));
             float fresnelCoe = (dot(viewIncidentDir,viewReflectDir) + 1.) / 2.;
             fresnelCoe = clamp(fresnelCoe, 0., 1.0);
-            float waterColorDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 40., 1.);
+            float waterColorDepth = getDepthFade(fragmentLinearEyeDepth, linearEyeDepth, 20., 1.);
+
             float colorLerp = mix(fresnelCoe, 1. - waterColorDepth, waterColorDepth);
+            colorLerp = mix(colorLerp, 1. - waterColorDepth, saturate(distance(eye, vPos) / 150.));
+            
 
             vec4 cos_grad = cosine_gradient(saturate(1. - colorLerp), phases, amplitudes, frequencies, offsets);
             cos_grad = clamp(cos_grad, vec4(0.), vec4(1.));
@@ -239,7 +242,7 @@ const _createWaterMaterial = () => {
             vec2 foamUv = mix(vec2(foamUvX, foamUvY), foamDistortion, 0.15);
             vec4 foamTex = texture2D(foamTexture, foamUv);
             foamTex = step(vec4(0.9), foamTex);
-            vec4 foamT = vec4(foamTex.r * (1.0 - foamDepth) * 1.5);
+            vec4 foamT = vec4(foamTex.r * (1.0 - foamDepth) * 2.);
             foamT = mix(vec4(0.), foamT, foamDepth * fadeoutLerp);
             vec4 foamLineCutOut = saturate(foamT);
             vec4 col2 = waterColor * ((vec4(1.0) - foamLineCutOut)) + foamT;
