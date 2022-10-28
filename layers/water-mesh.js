@@ -10,7 +10,7 @@ import WaterRenderer from '../water-effect/water-render.js';
 const PARTICLE_TEXTURE_PATHS = textureUrlSpecs.particleTexturePath;
 const PARTICLE_MODEL_PATHS = glbUrlSpecs.particleGLBPath;
 
-const {useProcGenManager, useGeometryBuffering, useLocalPlayer, useInternals} = metaversefile;
+const {useProcGenManager, useGeometryBuffering, useLocalPlayer, useInternals, useRenderSettings} = metaversefile;
 const {BufferedMesh, GeometryAllocator} = useGeometryBuffering();
 const procGenManager = useProcGenManager();
 
@@ -19,6 +19,7 @@ const fakeMaterial = new THREE.MeshBasicMaterial({
   color: 0xffffff,
 });
 const {renderer, camera, scene} = useInternals();
+const renderSettings = useRenderSettings();
 const localVector3D = new THREE.Vector3();
 const localVector3D2 = new THREE.Vector3();
 const localBox = new THREE.Box3();
@@ -385,12 +386,27 @@ export class WaterMesh extends BufferedMesh {
       swimAction.swimDamping = this.swimDamping;
     }
   }
+
   updateParticle(contactWater, localPlayer, waterSurfaceHeight) {
     this.particleEffect.contactWater = contactWater;
     this.particleEffect.player = localPlayer;
     this.particleEffect.waterSurfaceHeight = waterSurfaceHeight;
     this.particleEffect.update();
   };
+
+  updateUnderWater() {
+    const d = this.underWater ? 0.02 : 0; 
+    renderSettings.findRenderSettings(scene).fog.density = d;
+    
+    if (!this.cameraHasMask) {
+      camera.add(this.underWaterMask);
+      this.cameraHasMask = true;
+    } 
+    else {
+      camera.remove(this.underWaterMask);
+      this.cameraHasMask = false;
+    }
+  }
 
   update() {
     const localPlayer = useLocalPlayer();
@@ -418,6 +434,11 @@ export class WaterMesh extends BufferedMesh {
 
     this.underWater = camera.position.y - 0.03 < WATER_HEIGHT;
 
+    // underWater
+    if (this.cameraHasMask !== this.underWater) {
+      this.updateUnderWater();
+    }
+    
     this.material.uniforms.uTime.value = performance.now() / 1000;
     this.material.uniforms.playerPos.value.copy(localPlayer.position);
     this.material.uniforms.cameraInWater.value = this.underWater;
@@ -461,6 +482,18 @@ export class WaterMesh extends BufferedMesh {
     const tDistortion = textureLoader.load(`${baseUrl}../water-effect/assets/textures/distortion.png`);
     tDistortion.wrapS = tDistortion.wrapT = THREE.RepeatWrapping;
     this.material.uniforms.tDistortion.value = tDistortion;
+
+
+    // underwater mask
+    const geometry = new THREE.PlaneGeometry( 2, 2 );
+    const material = new THREE.MeshBasicMaterial( {color: 0x097F89, side: THREE.DoubleSide, transparent: true, opacity: 0.5, depthWrite: false} );
+    this.underWaterMask = new THREE.Mesh(geometry, material);
+    this.underWaterMask.position.set(0, 0, -0.2);
+    this.cameraHasMask = false;
+
+    renderSettings.findRenderSettings(scene).fog.color.r = 4 / 255;
+    renderSettings.findRenderSettings(scene).fog.color.g = 41.5 / 255;
+    renderSettings.findRenderSettings(scene).fog.color.b = 44.5 / 255;
   }
 
   async waitForLoad() {
